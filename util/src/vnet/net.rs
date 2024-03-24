@@ -9,12 +9,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use ipnet::IpNet;
+use log::info;
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 
 use super::conn_map::*;
 use super::interface::*;
-use crate::error::*;
+use crate::{error::*, Error};
 use crate::vnet::chunk::Chunk;
 use crate::vnet::conn::{ConnObserver, UdpConn};
 use crate::vnet::router::*;
@@ -22,9 +23,11 @@ use crate::{conn, ifaces, Conn};
 
 pub(crate) const LO0_STR: &str = "lo0";
 pub(crate) const UDP_STR: &str = "udp";
+pub(crate) const MAX_BINDING_ATTEMPTS : usize = 100;
 
 lazy_static! {
     pub static ref MAC_ADDR_COUNTER: AtomicU64 = AtomicU64::new(0xBEEFED910200);
+    pub static ref UDP_LOCAL_LISTEN_PORT : AtomicU64 = AtomicU64::new(1025);
 }
 
 pub(crate) type HardwareAddr = Vec<u8>;
@@ -34,6 +37,15 @@ pub(crate) fn new_mac_address() -> HardwareAddr {
         .fetch_add(1, Ordering::SeqCst)
         .to_be_bytes();
     b[2..].to_vec()
+}
+
+pub(crate) fn next_local_port() -> u16 {
+    // UDP_LOCAL_LISTEN_PORT.fetch_max(1025, Ordering::SeqCst);
+    let b = UDP_LOCAL_LISTEN_PORT
+        .fetch_add(1, Ordering::SeqCst)
+        .to_be_bytes();
+    let value : u16 = (b[1] as u16) << 8 | (b[0] as u16);
+    value
 }
 
 #[derive(Default)]
@@ -520,13 +532,68 @@ impl Net {
         }
     }
 
+    async fn send_binding_for_socket(&self, socket: Arc<UdpSocket>, addr: SocketAddr) -> Result<()> {
+        info!("Sending the binding information to the relayed socket");
+        let mut payload : Vec<u8> = Vec::new();
+        match addr.ip() {
+            IpAddr::V4(ip) => {
+                let mut ip_bytes = ip.octets().to_vec();
+                payload.append(&mut ip_bytes);
+            },
+            IpAddr::V6(ip) => {
+                let mut ip_bytes = ip.octets().to_vec();
+                payload.append(&mut ip_bytes);
+            },
+        }
+        let mut port_bytes = addr.port().to_be_bytes().to_vec();
+        payload.append(&mut port_bytes);
+        let buf = payload.as_slice();
+        // Hardcoded for now
+        let local_relay = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
+        socket.send_to(&buf, local_relay).await?;
+        Ok(())
+    }
+
     pub async fn bind(&self, addr: SocketAddr) -> Result<Arc<dyn Conn + Send + Sync>> {
         match self {
             Net::VNet(vnet) => {
                 let net = vnet.lock().await;
                 net.bind(addr).await
             }
-            Net::Ifs(_) => Ok(Arc::new(UdpSocket::bind(addr).await?)),
+            Net::Ifs(_) => {
+                // Creating the mapping for the socket to the relay
+                let mut counter = 0;
+                let mut mapping = next_local_port();
+                let mut localhost = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), mapping);
+                if addr.is_ipv6() {
+                    let loopback = IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1));
+                    localhost.set_ip(loopback);
+                }
+                loop {
+                    let sock = match UdpSocket::bind(localhost).await {
+                        Ok(s) => s,
+                        Err(_) => {
+                            // Should be because the binding failed
+                            if counter > MAX_BINDING_ATTEMPTS {
+                                break;
+                            }
+                            counter = counter + 1;
+                            mapping = next_local_port();
+                            localhost.set_port(mapping);
+                            continue;
+                        }
+                    };
+                    // Store the original local addr somewhere to share with the remote
+                    // app. To make this as little a change as possible store this deep
+                    // down in the implementation (aka. here)
+                    // OR: Connect and send the info directly, than nothing is needed
+                    let socket = Arc::new(sock);
+                    self.send_binding_for_socket(socket.clone(), addr).await?;
+                    return Ok(socket.clone());
+                }
+                return Err(crate::Error::ErrAddressSpaceExhausted);
+                // Ok(Arc::new(UdpSocket::bind(addr).await?))
+            },
         }
     }
 

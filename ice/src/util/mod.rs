@@ -2,7 +2,7 @@
 mod util_test;
 
 use std::collections::HashSet;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::sync::Arc;
 
 use stun::agent::*;
@@ -65,8 +65,18 @@ pub async fn get_xormapped_addr(
 
 const MAX_MESSAGE_SIZE: usize = 1280;
 
+// Idea: Replace the binding of the socket to the correct address with a
+// binding to a localhost socket and insert the correct address mapping
+// into any type of easy to retrieve storage. Connect to a localhost
+// address where the other application is listening on and send a UDP in UDP
+// packet to the socket which then know where to forward this information to.
+// The external application needs to store the to and from mapping (very)
+// similar to the actual NAT we are trying to navigate and allows sending
+// the packet back to the socket opened by ice. To allow for an easy 
+// management and differentiation bind to different ports. ~10000 addresses
+// should be enough for anything to work with
 pub async fn stun_request(
-    conn: &Arc<dyn Conn + Send + Sync>,
+    conn: &Arc<dyn Conn + Send + Sync>, // TODO: Can we simply replace this with the socket to our quicheperf, and fix the server_addr somehow?
     server_addr: SocketAddr,
     deadline: Duration,
 ) -> Result<Message> {
@@ -76,6 +86,7 @@ pub async fn stun_request(
     conn.send_to(&request.raw, server_addr).await?;
     let mut bs = vec![0_u8; MAX_MESSAGE_SIZE];
     let (n, _) = if deadline > Duration::from_secs(0) {
+        // TODO: Include some information in the packet which allows to emulate the from
         match tokio::time::timeout(deadline, conn.recv_from(&mut bs)).await {
             Ok(result) => match result {
                 Ok((n, addr)) => (n, addr),
