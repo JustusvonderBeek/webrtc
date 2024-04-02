@@ -1,7 +1,10 @@
 use std::sync::atomic::{AtomicBool, AtomicU64};
 
 use arc_swap::ArcSwapOption;
+use log::{debug, info};
 use util::sync::Mutex as SyncMutex;
+
+use self::agent_external::{start_external_listener, start_external_send, AgentExternal};
 
 use super::agent_transport::*;
 use super::*;
@@ -57,6 +60,12 @@ pub struct AgentInternal {
     pub(crate) local_candidates: Mutex<HashMap<NetworkType, Vec<Arc<dyn Candidate + Send + Sync>>>>,
     pub(crate) remote_candidates:
         Mutex<HashMap<NetworkType, Vec<Arc<dyn Candidate + Send + Sync>>>>,
+    
+    // These channels can be used to move the sending and receiving
+    // of STNU etc. out of the agent into an external program
+    // This might be relevant if STUN and other data should be multiplexed
+    // on the same socket
+    pub(crate) external_comm: Option<Arc<Mutex<AgentExternal>>>,
 
     // LRU of outbound Binding request Transaction IDs
     pub(crate) pending_binding_requests: Mutex<Vec<BindingRequest>>,
@@ -92,6 +101,18 @@ impl AgentInternal {
         let (done_tx, done_rx) = mpsc::channel(1);
         let (force_candidate_contact_tx, force_candidate_contact_rx) = mpsc::channel(1);
         let (started_ch_tx, _) = broadcast::channel(1);
+
+        let mut agent_external = None;        
+        // if tx.is_some() {
+        agent_external = Some(Arc::new(Mutex::new(AgentExternal::new())));
+        //     let agent2 = Arc::clone(&agent_external.unwrap());
+        //     let agent3 = Arc::clone(&agent2);
+        //     let agent4 = Arc::clone(&agent3);
+        //     start_external_listener(agent2, rx.unwrap()).unwrap();
+        //     start_external_send(agent3, tx.unwrap()).unwrap();
+        //     agent_external = Some(Arc::clone(&agent4));
+        // }
+
 
         let ai = AgentInternal {
             on_connected_tx: Mutex::new(Some(on_connected_tx)),
@@ -152,6 +173,12 @@ impl AgentInternal {
             local_candidates: Mutex::new(HashMap::new()),
             remote_candidates: Mutex::new(HashMap::new()),
 
+            // TODO: Maybe introduce a dedicate format instead of string, check if string works
+            // Register a send channel with the ICE agent. This will move all communication out of the
+            // ICE agent itself and the receiver of the channel is responsible for opening, sending and receiving data
+            // (e.g. STUN requests) instead of the agent itself
+            external_comm: agent_external,
+
             // LRU of outbound Binding request Transaction IDs
             pending_binding_requests: Mutex::new(vec![]),
 
@@ -166,6 +193,7 @@ impl AgentInternal {
         };
         (ai, chan_receivers)
     }
+
     pub(crate) async fn start_connectivity_checks(
         self: &Arc<Self>,
         is_controlling: bool,
@@ -303,6 +331,8 @@ impl AgentInternal {
     }
 
     pub(crate) async fn update_connection_state(&self, new_state: ConnectionState) {
+        // info!("Sending message from ICE");
+        // self.external_comm.as_ref().unwrap().lock().await.send_message("Test".to_string());
         if self.connection_state.load(Ordering::SeqCst) != new_state as u8 {
             // Connection has gone to failed, release all gathered candidates
             if new_state == ConnectionState::Failed {
@@ -556,6 +586,7 @@ impl AgentInternal {
         self: &Arc<Self>,
         c: &Arc<dyn Candidate + Send + Sync>,
     ) -> Result<()> {
+        debug!("Adding candidate: {}", c);
         let initialized_ch = {
             let started_ch_tx = self.started_ch_tx.lock().await;
             (*started_ch_tx).as_ref().map(|tx| tx.subscribe())
