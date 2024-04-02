@@ -13,6 +13,7 @@ pub(crate) mod agent_internal;
 pub mod agent_selector;
 pub mod agent_stats;
 pub mod agent_transport;
+pub mod agent_external;
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -26,6 +27,7 @@ use agent_config::*;
 use agent_internal::*;
 use agent_stats::*;
 use mdns::conn::*;
+use mio_extras::channel;
 use stun::agent::*;
 use stun::attributes::*;
 use stun::fingerprint::*;
@@ -258,6 +260,12 @@ impl Agent {
             .on_candidate_hdlr
             .store(Some(Arc::new(Mutex::new(f))));
     }
+
+    // This can be done via the agent config and therefore we don't need this function
+    // pub async fn ignore_local_candidate(&self, local: SocketAddr) -> Result<()> {
+    //     self.internal.exclude_candidates.lock().await.push(local);
+    //     Ok(())
+    // }
 
     /// Adds a new remote candidate.
     pub fn add_remote_candidate(&self, c: &Arc<dyn Candidate + Send + Sync>) -> Result<()> {
