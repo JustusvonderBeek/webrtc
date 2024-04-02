@@ -73,6 +73,15 @@ pub struct AgentConfig {
     /// bits of output to generate the username fragment.
     pub local_pwd: String,
 
+    /// If set, instead of binding to the actual address and performing the STUN
+    /// requests, the packets are forwarded to the given address as tunneled UDP in UDP
+    /// and the receiving application is responsible for sending and receiving the data.
+    /// This allows multiplexing ICE and QUIC or other protocols on the same socket
+    /// in parallel. 
+    /// In order to compensate for the created delay, the timeouts might
+    /// be set slightly more generous.
+    pub local_relayed_addr: Option<SocketAddr>,
+
     /// Controls mDNS behavior for the ICE agent.
     pub multicast_dns_mode: MulticastDnsMode,
 
@@ -210,6 +219,13 @@ impl AgentConfig {
         } else {
             a.check_interval = self.check_interval;
         }
+
+        if let Some(relayed_addr) = self.local_relayed_addr {
+            // TODO: Add function in internal agent
+        } else {
+            // TODO: Add function in internal agent
+        }
+
     }
 
     pub(crate) fn init_ext_ip_mapping(
