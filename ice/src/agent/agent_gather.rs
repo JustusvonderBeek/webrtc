@@ -273,6 +273,8 @@ impl Agent {
                     // accessible from the current interface.
                 case udp:*/
 
+                // TODO: Move this part out of the gatherer and export the communication into quicheperf or the other
+                // programs
                 let conn: Arc<dyn Conn + Send + Sync> = match listen_udp_in_port_range(
                     &net,
                     ephemeral_config.port_max(),
@@ -294,6 +296,8 @@ impl Agent {
                     }
                 };
 
+                // FIXME: Using the local addr of this conn to perform work on it.
+                // Because we "trick" ice into binding another socket this needs a rewrite
                 let port = match conn.local_addr() {
                     Ok(addr) => addr.port(),
                     Err(err) => {
@@ -608,6 +612,7 @@ impl Agent {
                     let _d = w;
 
                     let host_port = format!("{}:{}", url.host, url.port);
+                    // only meant to convert url into ip, does not change if url already ip
                     let server_addr = match net2.resolve_addr(is_ipv4, &host_port).await {
                         Ok(addr) => addr,
                         Err(err) => {
