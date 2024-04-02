@@ -548,8 +548,9 @@ impl Net {
         let mut port_bytes = addr.port().to_be_bytes().to_vec();
         payload.append(&mut port_bytes);
         let buf = payload.as_slice();
-        // Hardcoded for now
-        let local_relay = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
+        // Hardcoded for now (works with the same port because two different hosts in mininet)
+        let port = 12345;
+        let local_relay = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
         socket.send_to(&buf, local_relay).await?;
         Ok(())
     }
@@ -561,6 +562,7 @@ impl Net {
                 net.bind(addr).await
             }
             Net::Ifs(_) => {
+                info!("Binding socket in ICE requested for: {}", addr);
                 // Creating the mapping for the socket to the relay
                 let mut counter = 0;
                 let mut mapping = next_local_port();
