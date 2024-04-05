@@ -4,7 +4,7 @@ use arc_swap::ArcSwapOption;
 use log::{debug, info};
 use util::sync::Mutex as SyncMutex;
 
-use self::agent_external::{start_external_listener, start_external_send, AgentExternal};
+use self::agent_external::{AgentExternal};
 
 use super::agent_transport::*;
 use super::*;
@@ -433,6 +433,7 @@ impl AgentInternal {
         }
 
         for (local, remote) in pairs {
+            // info!("Ping CanidatePair: {} <-> {}", local, remote);
             self.ping_candidate(&local, &remote).await;
         }
     }
@@ -586,7 +587,7 @@ impl AgentInternal {
         self: &Arc<Self>,
         c: &Arc<dyn Candidate + Send + Sync>,
     ) -> Result<()> {
-        debug!("Adding candidate: {}", c);
+        info!("AgentInternal: adding candidate {}", c);
         let initialized_ch = {
             let started_ch_tx = self.started_ch_tx.lock().await;
             (*started_ch_tx).as_ref().map(|tx| tx.subscribe())
@@ -743,7 +744,7 @@ impl AgentInternal {
         local: &Arc<dyn Candidate + Send + Sync>,
         remote: &Arc<dyn Candidate + Send + Sync>,
     ) {
-        log::trace!(
+        log::info!(
             "[{}]: ping STUN from {} to {}",
             self.get_name(),
             local,
@@ -1045,6 +1046,8 @@ impl AgentInternal {
         local: &Arc<dyn Candidate + Send + Sync>,
         remote: &Arc<dyn Candidate + Send + Sync>,
     ) {
+        // TODO: Fix sending stun to remote, send relay to the quicheperf socket
+        
         if let Err(err) = local.write_to(&msg.raw, &**remote).await {
             log::trace!(
                 "[{}]: failed to send STUN message: {}",
