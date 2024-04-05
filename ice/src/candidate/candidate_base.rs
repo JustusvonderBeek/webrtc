@@ -1,4 +1,5 @@
 use std::fmt;
+use std::net::Ipv4Addr;
 use std::ops::Add;
 use std::sync::atomic::{AtomicU16, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
@@ -6,10 +7,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use crc::{Crc, CRC_32_ISCSI};
+use log::info;
 use tokio::sync::{broadcast, Mutex};
 use util::sync::Mutex as SyncMutex;
 
 use super::*;
+use crate::agent::agent_external::{serialize_send_info, SendInfo};
 use crate::candidate::candidate_host::CandidateHostConfig;
 use crate::candidate::candidate_peer_reflexive::CandidatePeerReflexiveConfig;
 use crate::candidate::candidate_relay::CandidateRelayConfig;
@@ -269,9 +272,22 @@ impl Candidate for CandidateBase {
 
     async fn write_to(&self, raw: &[u8], dst: &(dyn Candidate + Send + Sync)) -> Result<usize> {
         let n = if let Some(conn) = &self.conn {
-            let addr = dst.addr();
-            conn.send_to(raw, addr).await?
+            info!("Found socket");
+            let mut addr = dst.addr();
+            // Sending all packets to the quichperf relay.
+            // Include a SendInfo re-purposed to signal quicheperf from which socket
+            // and to which socket to send the relayed packet
+            addr.set_ip(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
+            addr.set_port(12345);
+            let send_info = SendInfo {
+                from: self.addr(),
+                to: dst.addr(),
+            };
+            let mut serialized = serialize_send_info(send_info).unwrap();
+            serialized.extend_from_slice(&raw);
+            conn.send_to(&serialized, addr).await?
         } else {
+            // info!("Socket not found");
             0
         };
         self.seen(true);
