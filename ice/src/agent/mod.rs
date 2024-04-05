@@ -27,7 +27,6 @@ use agent_config::*;
 use agent_internal::*;
 use agent_stats::*;
 use mdns::conn::*;
-use mio_extras::channel;
 use stun::agent::*;
 use stun::attributes::*;
 use stun::fingerprint::*;
