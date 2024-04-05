@@ -24,6 +24,8 @@ use crate::{conn, ifaces, Conn};
 pub(crate) const LO0_STR: &str = "lo0";
 pub(crate) const UDP_STR: &str = "udp";
 pub(crate) const MAX_BINDING_ATTEMPTS : usize = 100;
+pub const BINDING_PACKET_TYPE : u8 = 0xBB;
+
 
 lazy_static! {
     pub static ref MAC_ADDR_COUNTER: AtomicU64 = AtomicU64::new(0xBEEFED910200);
@@ -533,8 +535,9 @@ impl Net {
     }
 
     async fn send_binding_for_socket(&self, socket: Arc<UdpSocket>, addr: SocketAddr) -> Result<()> {
-        info!("Sending the binding information to the relayed socket");
+        info!("Sending binding information to relay");
         let mut payload : Vec<u8> = Vec::new();
+        payload.push(BINDING_PACKET_TYPE);
         match addr.ip() {
             IpAddr::V4(ip) => {
                 let mut ip_bytes = ip.octets().to_vec();
@@ -585,12 +588,16 @@ impl Net {
                             continue;
                         }
                     };
+
                     // Store the original local addr somewhere to share with the remote
                     // app. To make this as little a change as possible store this deep
                     // down in the implementation (aka. here)
                     // OR: Connect and send the info directly, than nothing is needed
                     let socket = Arc::new(sock);
-                    self.send_binding_for_socket(socket.clone(), addr).await?;
+                    // We use the assigned port to specify STUN source addresses later
+                    let mut bind_addr = addr.clone();
+                    bind_addr.set_port(socket.local_addr().unwrap().port());
+                    self.send_binding_for_socket(socket.clone(), bind_addr).await?;
                     return Ok(socket.clone());
                 }
                 return Err(crate::Error::ErrAddressSpaceExhausted);
