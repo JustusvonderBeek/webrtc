@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, io::Result, net::SocketAddr, sync::Arc, thread, time::Duration};
+use std::{collections::VecDeque, io::{self, Result}, net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr}, sync::Arc};
 use tokio::sync::Mutex;
 
 pub const MAX_STUN_DATA: usize = 1500;
@@ -34,8 +34,7 @@ pub(crate) struct AgentExternal {
     ingress_mgs: VecDeque<String>,
 }
 
-#[inline]
-fn serialize_socket_addr(addr: SocketAddr) -> Vec<u8> {
+pub fn serialize_socket_addr(addr: SocketAddr) -> Vec<u8> {
     let mut out : Vec<u8> = Vec::new();
     let mut ip = match addr.ip() {
         std::net::IpAddr::V4(ip) => {
@@ -69,6 +68,34 @@ pub fn serialize_send_info(send_info: SendInfo) -> Result<Vec<u8>> {
     serialized.insert(0, SEND_INFO_PACKET_TYPE);
 
     Ok(serialized)
+}
+
+pub fn parse_recv_info(buf: &[u8], len: usize) -> Result<SocketAddr> {
+    if len < 6 {
+        return Err(io::Error::other(crate::Error::ErrAddressParseFailed));
+    }
+    let addr = match len {
+        6 => {
+            let raw_ip : [u8; 4] = buf[0..4].try_into().unwrap();
+            let raw_port : [u8; 2] = buf[4..6].try_into().unwrap();
+            let from_ip = Ipv4Addr::from(raw_ip);
+            let from_port = u16::from_be_bytes(raw_port);
+            let s_addr = SocketAddr::new(IpAddr::V4(from_ip), from_port);
+            s_addr
+        },
+        18 => {
+            let raw_ip : [u8; 16] = buf[0..16].try_into().unwrap();
+            let raw_port : [u8; 2] = buf[16..18].try_into().unwrap();
+            let from_ip = Ipv6Addr::from(raw_ip);
+            let from_port = u16::from_be_bytes(raw_port);
+            let s_addr = SocketAddr::new(IpAddr::V6(from_ip), from_port);
+            s_addr
+        },
+        _ => {
+            return Err(io::Error::other(crate::Error::ErrAddressParseFailed));
+        }
+    };
+    Ok(addr)
 }
 
 impl AgentExternal {

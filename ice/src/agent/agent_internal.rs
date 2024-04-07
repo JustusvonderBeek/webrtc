@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicU64};
 
+use agent_internal::agent_external::parse_recv_info;
 use arc_swap::ArcSwapOption;
 use log::{debug, info};
 use util::sync::Mutex as SyncMutex;
@@ -1167,6 +1168,8 @@ impl AgentInternal {
         let mut src_addr;
         loop {
             tokio::select! {
+               // TODO: We need to implement another struct signalling where the packet came from.
+               // Otherwise the processing of this frame generates false conclusions
                result = conn.recv_from(&mut buffer) => {
                    match result {
                        Ok((num, src)) => {
@@ -1179,8 +1182,22 @@ impl AgentInternal {
                 _  = closed_ch_rx.recv() => return Err(Error::ErrClosed),
             }
 
-            self.handle_inbound_candidate_msg(&candidate, &buffer[..n], src_addr, addr)
-                .await;
+            let p_type = buffer[0];
+            match p_type {
+                0xCC => {
+                    debug!("Received relayed packet in ICE, extracting relay information");
+                    let len = buffer[1];
+                    let from = parse_recv_info(&buffer[2..], len as usize).unwrap();
+                    src_addr = from;
+
+                    self.handle_inbound_candidate_msg(&candidate, &buffer[(2 + len as usize)..n], src_addr, addr)
+                    .await;
+                },
+                _ => {
+                    self.handle_inbound_candidate_msg(&candidate, &buffer[..n], src_addr, addr)
+                    .await;
+                }
+            }
         }
     }
 
