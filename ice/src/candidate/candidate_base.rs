@@ -272,7 +272,7 @@ impl Candidate for CandidateBase {
 
     async fn write_to(&self, raw: &[u8], dst: &(dyn Candidate + Send + Sync)) -> Result<usize> {
         let n = if let Some(conn) = &self.conn {
-            info!("Found socket");
+            // info!("Found socket");
             let mut addr = dst.addr();
             // Sending all packets to the quichperf relay.
             // Include a SendInfo re-purposed to signal quicheperf from which socket
