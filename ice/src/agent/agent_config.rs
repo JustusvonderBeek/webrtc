@@ -220,12 +220,6 @@ impl AgentConfig {
             a.check_interval = self.check_interval;
         }
 
-        if let Some(relayed_addr) = self.local_relayed_addr {
-            // TODO: Add function in internal agent
-        } else {
-            // TODO: Add function in internal agent
-        }
-
     }
 
     pub(crate) fn init_ext_ip_mapping(
