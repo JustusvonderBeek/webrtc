@@ -2,10 +2,11 @@
 mod util_test;
 
 use std::collections::HashSet;
-use std::net::{IpAddr, SocketAddr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::ops::Add;
 use std::sync::Arc;
 
+use log::{debug, info};
 use stun::agent::*;
 use stun::attributes::*;
 use stun::integrity::*;
@@ -17,6 +18,7 @@ use util::vnet::net::*;
 use util::Conn;
 
 use crate::agent::agent_config::{InterfaceFilterFn, IpFilterFn};
+use crate::agent::agent_external::{parse_recv_info, serialize_send_info, SendInfo};
 use crate::error::*;
 use crate::network_type::*;
 
@@ -59,6 +61,7 @@ pub async fn get_xormapped_addr(
     deadline: Duration,
 ) -> Result<XorMappedAddress> {
     let resp = stun_request(conn, server_addr, deadline).await?;
+    info!("Stun request successful...");
     let mut addr = XorMappedAddress::default();
     addr.get_from(&resp)?;
     Ok(addr)
@@ -70,21 +73,34 @@ const MAX_MESSAGE_SIZE: usize = 1280;
 // binding to a localhost socket and insert the correct address mapping
 // into any type of easy to retrieve storage. Connect to a localhost
 // address where the other application is listening on and send a UDP in UDP
-// packet to the socket which then know where to forward this information to.
+// packet to the socket which then know where to forward this informatiosn to.
 // The external application needs to store the to and from mapping (very)
 // similar to the actual NAT we are trying to navigate and allows sending
 // the packet back to the socket opened by ice. To allow for an easy 
 // management and differentiation bind to different ports. ~10000 addresses
 // should be enough for anything to work with
 pub async fn stun_request(
-    conn: &Arc<dyn Conn + Send + Sync>, // TODO: Can we simply replace this with the socket to our quicheperf, and fix the server_addr somehow?
+    conn: &Arc<dyn Conn + Send + Sync>,
     server_addr: SocketAddr,
     deadline: Duration,
 ) -> Result<Message> {
+    // Modifying the 'server' addr to be contained in the packet
+    // The packet is also relayed via quicheperf to obtain control
+    // over the socket
+    let relayed_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
+    let send_info = SendInfo {
+        from: conn.local_addr().unwrap(),
+        to: server_addr,
+    };
+    info!("STUN request send info: {:?}", send_info);
+    let mut send_info_raw = serialize_send_info(send_info).unwrap();
+
     let mut request = Message::new();
     request.build(&[Box::new(BINDING_REQUEST), Box::new(TransactionId::new())])?;
+    send_info_raw.append(&mut request.raw);
+    
+    conn.send_to(&send_info_raw, relayed_addr).await?;
 
-    conn.send_to(&request.raw, server_addr).await?;
     let mut bs = vec![0_u8; MAX_MESSAGE_SIZE];
     let (n, _) = if deadline > Duration::from_secs(0) {
         // TODO: Increase the timeout duration since we have the ICE indirection
@@ -99,10 +115,23 @@ pub async fn stun_request(
         conn.recv_from(&mut bs).await?
     };
 
+    // Check if we received a relayed packet or not
     let mut res = Message::new();
-    res.raw = bs[..n].to_vec();
-    res.decode()?;
-
+    let p_type = bs[0];
+    match p_type {
+        0xCC => {
+            debug!("Received relayed STUN response");
+            let len = bs[1];
+            let from = parse_recv_info(&bs[2..], len as usize).unwrap();
+            // TODO: Check if we need to do something with the from information or not
+            res.raw = bs[(2 + len as usize)..n].to_vec();
+            res.decode()?;
+        },
+        _ => {
+            res.raw = bs[..n].to_vec();
+            res.decode()?;
+        }
+    }
     Ok(res)
 }
 
