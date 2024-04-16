@@ -3,6 +3,7 @@ mod util_test;
 
 use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr, UdpSocket};
+use std::ops::Add;
 use std::sync::Arc;
 
 use stun::agent::*;
@@ -86,8 +87,8 @@ pub async fn stun_request(
     conn.send_to(&request.raw, server_addr).await?;
     let mut bs = vec![0_u8; MAX_MESSAGE_SIZE];
     let (n, _) = if deadline > Duration::from_secs(0) {
-        // TODO: Include some information in the packet which allows to emulate the from
-        match tokio::time::timeout(deadline, conn.recv_from(&mut bs)).await {
+        // TODO: Increase the timeout duration since we have the ICE indirection
+        match tokio::time::timeout(deadline.add(Duration::from_millis(200)), conn.recv_from(&mut bs)).await {
             Ok(result) => match result {
                 Ok((n, addr)) => (n, addr),
                 Err(err) => return Err(Error::Other(err.to_string())),
