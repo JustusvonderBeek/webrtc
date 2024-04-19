@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, io::{self, Result}, net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr}, sync::Arc};
 use tokio::sync::Mutex;
+use log::error;
 
 pub const MAX_STUN_DATA: usize = 1500;
 pub const SEND_INFO_PACKET_TYPE : u8 = 0xAA;
@@ -96,6 +97,55 @@ pub fn parse_recv_info(buf: &[u8], len: usize) -> Result<SocketAddr> {
         }
     };
     Ok(addr)
+}
+
+pub fn parse_send_info(buf: &[u8], len: usize) -> Result<SendInfo> {
+    let send_info = match len  {
+        // 2 * IPv4 = 2 * (4 + 2) = 12
+        12 => {
+            // IPv4 to IPv4
+            let raw_ip : [u8; 4] = buf[0..4].try_into().unwrap();
+            let raw_port : [u8; 2] = buf[4..6].try_into().unwrap();
+            let from_ip = Ipv4Addr::from(raw_ip);
+            let from_port = u16::from_be_bytes(raw_port);
+            let s_addr = SocketAddr::new(IpAddr::V4(from_ip), from_port);
+            
+            let raw_d_ip : [u8; 4] = buf[6..10].try_into().unwrap();
+            let raw_d_port : [u8; 2] = buf[10..12].try_into().unwrap();
+            let to_ip = Ipv4Addr::from(raw_d_ip);
+            let to_port = u16::from_be_bytes(raw_d_port);
+            let d_addr = SocketAddr::new(IpAddr::V4(to_ip), to_port);
+            let s_info = SendInfo {
+                from: s_addr,
+                to: d_addr,
+            };
+            s_info
+        },
+        // 2 * IPv6 = 2 * (16 + 2) = 36
+        36 => {
+            let raw_ip : [u8; 16] = buf[0..16].try_into().unwrap();
+            let raw_port : [u8; 2] = buf[16..18].try_into().unwrap();
+            let from_ip = Ipv6Addr::from(raw_ip);
+            let from_port = u16::from_be_bytes(raw_port);
+            let s_addr = SocketAddr::new(IpAddr::V6(from_ip), from_port);
+            
+            let raw_d_ip : [u8; 16] = buf[18..34].try_into().unwrap();
+            let raw_d_port : [u8; 2] = buf[34..36].try_into().unwrap();
+            let to_ip = Ipv6Addr::from(raw_d_ip);
+            let to_port = u16::from_be_bytes(raw_d_port);
+            let d_addr = SocketAddr::new(IpAddr::V6(to_ip), to_port);
+            let s_info = SendInfo{
+                from: s_addr,
+                to: d_addr,
+            };
+            s_info
+        },
+        _ => {
+            error!("Given send info size {} cannot be parsed", len);
+            return Err(io::Error::other(crate::Error::ErrAddressParseFailed));
+        }
+    };
+    Ok(send_info)
 }
 
 impl AgentExternal {
