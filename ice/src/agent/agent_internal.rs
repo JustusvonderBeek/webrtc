@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, AtomicU64};
 
-use agent_internal::agent_external::parse_recv_info;
+use agent_internal::agent_external::{parse_recv_info, parse_send_info};
 use arc_swap::ArcSwapOption;
 use log::{debug, info};
 use util::sync::Mutex as SyncMutex;
@@ -229,6 +229,8 @@ impl AgentInternal {
         self.request_connectivity_check();
 
         self.connectivity_checks().await;
+
+        // info!("Requested connectivity checks, should have started_ch_take: {:?}", self.started_ch_tx.lock().await);
 
         Ok(())
     }
@@ -1048,7 +1050,7 @@ impl AgentInternal {
         remote: &Arc<dyn Candidate + Send + Sync>,
     ) {
         // TODO: Fix sending stun to remote, send relay to the quicheperf socket
-        
+
         if let Err(err) = local.write_to(&msg.raw, &**remote).await {
             log::trace!(
                 "[{}]: failed to send STUN message: {}",
@@ -1168,8 +1170,6 @@ impl AgentInternal {
         let mut src_addr;
         loop {
             tokio::select! {
-               // TODO: We need to implement another struct signalling where the packet came from.
-               // Otherwise the processing of this frame generates false conclusions
                result = conn.recv_from(&mut buffer) => {
                    match result {
                        Ok((num, src)) => {
@@ -1187,8 +1187,8 @@ impl AgentInternal {
                 0xCC => {
                     debug!("Received relayed packet in ICE, extracting relay information");
                     let len = buffer[1];
-                    let from = parse_recv_info(&buffer[2..], len as usize).unwrap();
-                    src_addr = from;
+                    let recv_info = parse_send_info(&buffer[2..], len as usize).unwrap();
+                    src_addr = recv_info.from;
 
                     self.handle_inbound_candidate_msg(&candidate, &buffer[(2 + len as usize)..n], src_addr, addr)
                     .await;

@@ -279,8 +279,16 @@ impl Candidate for CandidateBase {
             // and to which socket to send the relayed packet
             addr.set_ip(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
             addr.set_port(12345);
+            let mut from = self.addr();
+            // In case we are using a STUN resolved addr, send the related addr info
+            // so the relay has info which socket to use
+            if let Some(related) = self.related_address() {
+                let ip : IpAddr = related.address.parse().unwrap();
+                let port = related.port;
+                from = SocketAddr::new(ip, port);
+            }
             let send_info = SendInfo {
-                from: self.addr(),
+                from: from,
                 to: dst.addr(),
             };
             let mut serialized = serialize_send_info(send_info).unwrap();

@@ -1,7 +1,8 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use log::info;
 use util::vnet::net::*;
 use util::Conn;
 use waitgroup::WaitGroup;
@@ -649,8 +650,9 @@ impl Agent {
                             return Ok(());
                         }
                     };
+                    info!("Bound to port range at: {}", conn.local_addr().unwrap());
 
-                    let xoraddr =
+                    let xoraddr_recvon =
                         match get_xormapped_addr(&conn, server_addr, STUN_GATHER_TIMEOUT).await {
                             Ok(xoraddr) => xoraddr,
                             Err(err) => {
@@ -665,9 +667,25 @@ impl Agent {
                             }
                         };
 
+                    let xoraddr = xoraddr_recvon.0;
                     let (ip, port) = (xoraddr.ip, xoraddr.port);
 
-                    let laddr = conn.local_addr()?;
+                    // We have to perform this check here since we are messing with the recv addr
+                    // in the response but want to allow non relayed options as well
+                    let laddr = match xoraddr_recvon.1 {
+                        SocketAddr::V4(ip) => {
+                            if *ip.ip() == Ipv4Addr::new(0, 0, 0, 0) && ip.port() == 0 {
+                                conn.local_addr()?
+                            } else {
+                                SocketAddr::V4(ip)
+                            }
+                        },
+                        SocketAddr::V6(_) => {
+                            // TODO: Not using IPv6 for now
+                            conn.local_addr()?
+                        }
+                    };
+                    // let laddr = conn.local_addr()?;
                     let srflx_config = CandidateServerReflexiveConfig {
                         base_config: CandidateBaseConfig {
                             network: network.clone(),
@@ -727,6 +745,7 @@ impl Agent {
         net: Arc<Net>,
         agent_internal: Arc<AgentInternal>,
     ) {
+        info!("Gathering candidates relay");
         let wg = WaitGroup::new();
 
         for url in urls {

@@ -18,7 +18,7 @@ use util::vnet::net::*;
 use util::Conn;
 
 use crate::agent::agent_config::{InterfaceFilterFn, IpFilterFn};
-use crate::agent::agent_external::{parse_recv_info, serialize_send_info, SendInfo};
+use crate::agent::agent_external::{parse_recv_info, parse_send_info, serialize_send_info, SendInfo};
 use crate::error::*;
 use crate::network_type::*;
 
@@ -59,12 +59,12 @@ pub async fn get_xormapped_addr(
     conn: &Arc<dyn Conn + Send + Sync>,
     server_addr: SocketAddr,
     deadline: Duration,
-) -> Result<XorMappedAddress> {
+) -> Result<(XorMappedAddress, SocketAddr)> {
     let resp = stun_request(conn, server_addr, deadline).await?;
-    info!("Stun request successful...");
+    // info!("Stun request successful...");
     let mut addr = XorMappedAddress::default();
-    addr.get_from(&resp)?;
-    Ok(addr)
+    addr.get_from(&resp.0)?;
+    Ok((addr, resp.1))
 }
 
 const MAX_MESSAGE_SIZE: usize = 1280;
@@ -83,7 +83,7 @@ pub async fn stun_request(
     conn: &Arc<dyn Conn + Send + Sync>,
     server_addr: SocketAddr,
     deadline: Duration,
-) -> Result<Message> {
+) -> Result<(Message, SocketAddr)> {
     // Modifying the 'server' addr to be contained in the packet
     // The packet is also relayed via quicheperf to obtain control
     // over the socket
@@ -92,7 +92,7 @@ pub async fn stun_request(
         from: conn.local_addr().unwrap(),
         to: server_addr,
     };
-    info!("STUN request send info: {:?}", send_info);
+    // info!("STUN request send info: {:?}", send_info);
     let mut send_info_raw = serialize_send_info(send_info).unwrap();
 
     let mut request = Message::new();
@@ -100,7 +100,7 @@ pub async fn stun_request(
     send_info_raw.append(&mut request.raw);
     
     conn.send_to(&send_info_raw, relayed_addr).await?;
-
+    
     let mut bs = vec![0_u8; MAX_MESSAGE_SIZE];
     let (n, _) = if deadline > Duration::from_secs(0) {
         // TODO: Increase the timeout duration since we have the ICE indirection
@@ -118,12 +118,14 @@ pub async fn stun_request(
     // Check if we received a relayed packet or not
     let mut res = Message::new();
     let p_type = bs[0];
+    let mut local_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0);
     match p_type {
         0xCC => {
-            debug!("Received relayed STUN response");
             let len = bs[1];
-            let from = parse_recv_info(&bs[2..], len as usize).unwrap();
+            let recv_info = parse_send_info(&bs[2..], len as usize).unwrap();
             // TODO: Check if we need to do something with the from information or not
+            info!("Received relayed STUN response from {}->{}", recv_info.from, recv_info.to);
+            local_addr = recv_info.to;
             res.raw = bs[(2 + len as usize)..n].to_vec();
             res.decode()?;
         },
@@ -132,7 +134,7 @@ pub async fn stun_request(
             res.decode()?;
         }
     }
-    Ok(res)
+    Ok((res, local_addr))
 }
 
 pub async fn local_interfaces(
