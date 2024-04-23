@@ -6,12 +6,14 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use ipnet::IpNet;
 use log::info;
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 
 use super::conn_map::*;
 use super::interface::*;
@@ -535,7 +537,7 @@ impl Net {
     }
 
     async fn send_binding_for_socket(&self, socket: Arc<UdpSocket>, addr: SocketAddr) -> Result<()> {
-        info!("Sending binding information to relay");
+        // info!("Sending binding information to relay");
         let mut payload : Vec<u8> = Vec::new();
         payload.push(BINDING_PACKET_TYPE);
         match addr.ip() {
@@ -555,12 +557,18 @@ impl Net {
         let port = 12345;
         let local_relay = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
         socket.send_to(&buf, local_relay).await?;
+
+        // In order not to proceed too fast and having the quicheperf missing outgoing tries wait
+        // FIXME: this should not be necessary later on; maybe introduce an answer from the relay...
+        sleep(Duration::from_millis(100)).await;
+
         Ok(())
     }
 
     pub async fn bind(&self, addr: SocketAddr) -> Result<Arc<dyn Conn + Send + Sync>> {
         match self {
             Net::VNet(vnet) => {
+                info!("Using the VNet to bind socket");
                 let net = vnet.lock().await;
                 net.bind(addr).await
             }
