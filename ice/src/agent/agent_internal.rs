@@ -167,7 +167,7 @@ impl AgentInternal {
             keepalive_interval: Duration::from_secs(0),
 
             // How often should we run our internal taskLoop to check for state changes when connecting
-            check_interval: Duration::from_secs(0),
+            check_interval: Duration::from_millis(200),
 
             ufrag_pwd: Mutex::new(UfragPwd::default()),
 
