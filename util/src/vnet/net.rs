@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use ipnet::IpNet;
-use log::info;
+use log::{info, warn};
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -27,7 +27,7 @@ pub(crate) const LO0_STR: &str = "lo0";
 pub(crate) const UDP_STR: &str = "udp";
 pub(crate) const MAX_BINDING_ATTEMPTS : usize = 100;
 pub const BINDING_PACKET_TYPE : u8 = 0xBB;
-
+pub const CONFIRM_BINDING_PACKET_TYPE : u8 = 0xBD;
 
 lazy_static! {
     pub static ref MAC_ADDR_COUNTER: AtomicU64 = AtomicU64::new(0xBEEFED910200);
@@ -558,9 +558,12 @@ impl Net {
         let local_relay = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
         socket.send_to(&buf, local_relay).await?;
 
-        // In order not to proceed too fast and having the quicheperf missing outgoing tries wait
-        // FIXME: this should not be necessary later on; maybe introduce an answer from the relay...
-        sleep(Duration::from_millis(100)).await;
+        // In order not to proceed too fast, wait for an answer until the socket has been bound, then proceed
+        let mut confirm_buf :[u8; 10] = [0; 10];
+        let confirm_size = socket.recv(&mut confirm_buf).await.unwrap();
+        if confirm_size != 10 || confirm_buf[0] != CONFIRM_BINDING_PACKET_TYPE {
+            warn!("Check the implementation, something is wrong with the confirm packet after the socket bind!");
+        }
 
         Ok(())
     }
