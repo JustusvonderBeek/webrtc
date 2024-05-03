@@ -747,7 +747,7 @@ impl AgentInternal {
         local: &Arc<dyn Candidate + Send + Sync>,
         remote: &Arc<dyn Candidate + Send + Sync>,
     ) {
-        log::info!(
+        log::trace!(
             "[{}]: ping STUN from {} to {}",
             self.get_name(),
             local,
