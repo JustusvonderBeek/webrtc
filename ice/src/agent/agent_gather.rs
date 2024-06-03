@@ -297,8 +297,6 @@ impl Agent {
                     }
                 };
 
-                // FIXME: Using the local addr of this conn to perform work on it.
-                // Because we "trick" ice into binding another socket this needs a rewrite
                 let port = match conn.local_addr() {
                     Ok(addr) => addr.port(),
                     Err(err) => {

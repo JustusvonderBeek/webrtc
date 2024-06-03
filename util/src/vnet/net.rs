@@ -27,7 +27,7 @@ pub(crate) const LO0_STR: &str = "lo0";
 pub(crate) const UDP_STR: &str = "udp";
 pub(crate) const MAX_BINDING_ATTEMPTS : usize = 100;
 pub const BINDING_PACKET_TYPE : u8 = 0xBB;
-pub const CONFIRM_BINDING_PACKET_TYPE : u8 = 0xBD;
+pub const CONFIRM_BINDING_PACKET_TYPE : u8 = 0xBC;
 
 lazy_static! {
     pub static ref MAC_ADDR_COUNTER: AtomicU64 = AtomicU64::new(0xBEEFED910200);
