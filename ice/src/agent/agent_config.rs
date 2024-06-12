@@ -161,6 +161,9 @@ pub struct AgentConfig {
     /// Controls if self-signed certificates are accepted when connecting to TURN servers via TLS or
     /// DTLS.
     pub insecure_skip_verify: bool,
+
+    /// Signals the IP endpoint the agent should locally relay STUN packets to
+    pub relay_listener_endpoint: Option<String>,
 }
 
 impl AgentConfig {

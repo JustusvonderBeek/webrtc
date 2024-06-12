@@ -59,8 +59,9 @@ pub async fn get_xormapped_addr(
     conn: &Arc<dyn Conn + Send + Sync>,
     server_addr: SocketAddr,
     deadline: Duration,
+    relay_port: u16,
 ) -> Result<(XorMappedAddress, SocketAddr)> {
-    let resp = stun_request(conn, server_addr, deadline).await?;
+    let resp = stun_request(conn, server_addr, deadline, relay_port).await?;
     // info!("Stun request successful...");
     let mut addr = XorMappedAddress::default();
     addr.get_from(&resp.0)?;
@@ -83,11 +84,12 @@ pub async fn stun_request(
     conn: &Arc<dyn Conn + Send + Sync>,
     server_addr: SocketAddr,
     deadline: Duration,
+    relay_port: u16,
 ) -> Result<(Message, SocketAddr)> {
     // Modifying the 'server' addr to be contained in the packet
     // The packet is also relayed via quicheperf to obtain control
     // over the socket
-    let relayed_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345);
+    let relayed_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), relay_port);
     let send_info = SendInfo {
         from: conn.local_addr().unwrap(),
         to: server_addr,
@@ -186,9 +188,10 @@ pub async fn listen_udp_in_port_range(
     port_max: u16,
     port_min: u16,
     laddr: SocketAddr,
+    relay_port: u16,
 ) -> Result<Arc<dyn Conn + Send + Sync>> {
     if laddr.port() != 0 || (port_min == 0 && port_max == 0) {
-        return Ok(vnet.bind(laddr).await?);
+        return Ok(vnet.bind(laddr, relay_port).await?);
     }
     let i = if port_min == 0 { 1 } else { port_min };
     let j = if port_max == 0 { 0xFFFF } else { port_max };
@@ -200,7 +203,7 @@ pub async fn listen_udp_in_port_range(
     let mut port_current = port_start;
     loop {
         let laddr = SocketAddr::new(laddr.ip(), port_current);
-        match vnet.bind(laddr).await {
+        match vnet.bind(laddr, relay_port).await {
             Ok(c) => return Ok(c),
             Err(err) => log::debug!("failed to listen {}: {}", laddr, err),
         };

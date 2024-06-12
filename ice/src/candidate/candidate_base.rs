@@ -270,7 +270,7 @@ impl Candidate for CandidateBase {
         }
     }
 
-    async fn write_to(&self, raw: &[u8], dst: &(dyn Candidate + Send + Sync)) -> Result<usize> {
+    async fn write_to(&self, raw: &[u8], dst: &(dyn Candidate + Send + Sync), relay_port: u16) -> Result<usize> {
         let n = if let Some(conn) = &self.conn {
             // info!("Found socket");
             let mut addr = dst.addr();
@@ -278,7 +278,7 @@ impl Candidate for CandidateBase {
             // Include a SendInfo re-purposed to signal quicheperf from which socket
             // and to which socket to send the relayed packet
             addr.set_ip(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
-            addr.set_port(12345);
+            addr.set_port(relay_port);
             let mut from = self.addr();
             // In case we are using a STUN resolved addr, send the related addr info
             // so the relay has info which socket to use

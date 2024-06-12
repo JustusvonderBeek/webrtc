@@ -80,7 +80,7 @@ pub trait Candidate: fmt::Display {
     async fn close(&self) -> Result<()>;
     fn seen(&self, outbound: bool);
 
-    async fn write_to(&self, raw: &[u8], dst: &(dyn Candidate + Send + Sync)) -> Result<usize>;
+    async fn write_to(&self, raw: &[u8], dst: &(dyn Candidate + Send + Sync), relay_port:  u16) -> Result<usize>;
     fn equal(&self, other: &dyn Candidate) -> bool;
     fn set_ip(&self, ip: &IpAddr) -> Result<()>;
     fn get_conn(&self) -> Option<&Arc<dyn util::Conn + Send + Sync>>;
@@ -319,6 +319,7 @@ impl CandidatePair {
     }
 
     pub async fn write(&self, b: &[u8]) -> Result<usize> {
-        self.local.write_to(b, &*self.remote).await
+        let port = if self.ice_role_controlling.load(Ordering::SeqCst) { 12345 } else { 12346 };
+        self.local.write_to(b, &*self.remote, port).await
     }
 }

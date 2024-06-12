@@ -182,7 +182,7 @@ async fn build_vnet() -> Result<VNet> {
     }
 
     // start server...
-    let conn = net0.bind(SocketAddr::from_str("0.0.0.0:3478")?).await?;
+    let conn = net0.bind(SocketAddr::from_str("0.0.0.0:3478")?, 0).await?;
 
     let server = Server::new(ServerConfig {
         conn_configs: vec![ConnConfig {
@@ -223,7 +223,7 @@ async fn build_vnet() -> Result<VNet> {
 async fn test_server_vnet_send_binding_request() -> Result<()> {
     let v = build_vnet().await?;
 
-    let lconn = v.netl0.bind(SocketAddr::from_str("0.0.0.0:0")?).await?;
+    let lconn = v.netl0.bind(SocketAddr::from_str("0.0.0.0:0")?, 0).await?;
     log::debug!("creating a client.");
     let client = Client::new(ClientConfig {
         stun_serv_addr: "1.2.3.4:3478".to_owned(),
@@ -260,7 +260,7 @@ async fn test_server_vnet_send_binding_request() -> Result<()> {
 async fn test_server_vnet_echo_via_relay() -> Result<()> {
     let v = build_vnet().await?;
 
-    let lconn = v.netl0.bind(SocketAddr::from_str("0.0.0.0:0")?).await?;
+    let lconn = v.netl0.bind(SocketAddr::from_str("0.0.0.0:0")?, 0).await?;
     log::debug!("creating a client.");
     let client = Client::new(ClientConfig {
         stun_serv_addr: "stun.webrtc.rs:3478".to_owned(),
@@ -283,7 +283,7 @@ async fn test_server_vnet_echo_via_relay() -> Result<()> {
 
     log::debug!("laddr: {}", conn.local_addr()?);
 
-    let echo_conn = v.net1.bind(SocketAddr::from_str("1.2.3.5:5678")?).await?;
+    let echo_conn = v.net1.bind(SocketAddr::from_str("1.2.3.5:5678")?, 0).await?;
     let echo_addr = echo_conn.local_addr()?;
 
     let (done_tx, mut done_rx) = mpsc::channel::<()>(1);

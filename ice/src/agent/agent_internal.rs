@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 
 use agent_internal::agent_external::{parse_recv_info, parse_send_info};
@@ -91,6 +92,9 @@ pub struct AgentInternal {
     pub(crate) keepalive_interval: Duration,
     // How often should we run our internal taskLoop to check for state changes when connecting
     pub(crate) check_interval: Duration,
+
+    // Where to relay the STUN requests to
+    pub(crate) relay_listener_port: u16,
 }
 
 impl AgentInternal {
@@ -114,6 +118,13 @@ impl AgentInternal {
         //     agent_external = Some(Arc::clone(&agent4));
         // }
 
+        let mut relay_listener_endpoint = 12345;
+        if let Some(listen_endpoint) = &config.relay_listener_endpoint {
+            let ip_and_port = listen_endpoint.split(":");
+            let parts = ip_and_port.collect::<Vec<&str>>();
+            let port = parts[1].parse::<u16>().unwrap();
+            relay_listener_endpoint = port;
+        }
 
         let ai = AgentInternal {
             on_connected_tx: Mutex::new(Some(on_connected_tx)),
@@ -168,6 +179,8 @@ impl AgentInternal {
 
             // How often should we run our internal taskLoop to check for state changes when connecting
             check_interval: Duration::from_millis(200),
+
+            relay_listener_port: relay_listener_endpoint,
 
             ufrag_pwd: Mutex::new(UfragPwd::default()),
 
@@ -1050,8 +1063,7 @@ impl AgentInternal {
         remote: &Arc<dyn Candidate + Send + Sync>,
     ) {
         // TODO: Fix sending stun to remote, send relay to the quicheperf socket
-
-        if let Err(err) = local.write_to(&msg.raw, &**remote).await {
+        if let Err(err) = local.write_to(&msg.raw, &**remote, self.relay_listener_port).await {
             log::trace!(
                 "[{}]: failed to send STUN message: {}",
                 self.get_name(),

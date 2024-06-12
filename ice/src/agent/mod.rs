@@ -118,6 +118,9 @@ pub struct Agent {
     pub(crate) network_types: Vec<NetworkType>,
 
     pub(crate) gather_candidate_cancel: Option<GatherCandidateCancelFn>,
+
+    // In case ICE is relayed to quicheperf
+    pub(crate) relay_listen_endpoint: Option<String>,
 }
 
 impl Agent {
@@ -212,6 +215,8 @@ impl Agent {
             network_types: config.network_types.clone(),
 
             gather_candidate_cancel: None, //TODO: add cancel
+
+            relay_listen_endpoint: config.relay_listener_endpoint,
         };
 
         agent.internal.start_on_connection_state_change_routine(

@@ -223,7 +223,7 @@ pub(crate) async fn add_vnet_stun(wan_net: Arc<net::Net>) -> Result<turn::server
     let conn = wan_net
         .bind(SocketAddr::from_str(&format!(
             "{VNET_STUN_SERVER_IP}:{VNET_STUN_SERVER_PORT}"
-        ))?)
+        ))?, 0)
         .await?;
 
     let server = turn::server::Server::new(turn::server::config::ServerConfig {

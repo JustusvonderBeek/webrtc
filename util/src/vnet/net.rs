@@ -536,7 +536,7 @@ impl Net {
         }
     }
 
-    async fn send_binding_for_socket(&self, socket: Arc<UdpSocket>, addr: SocketAddr) -> Result<()> {
+    async fn send_binding_for_socket(&self, socket: Arc<UdpSocket>, addr: SocketAddr, relay_port: u16) -> Result<()> {
         // info!("Sending binding information to relay");
         let mut payload : Vec<u8> = Vec::new();
         payload.push(BINDING_PACKET_TYPE);
@@ -554,8 +554,8 @@ impl Net {
         payload.append(&mut port_bytes);
         let buf = payload.as_slice();
         // Hardcoded for now (works with the same port because two different hosts in mininet)
-        let port = 12345;
-        let local_relay = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
+        // let port = 12345;
+        let local_relay = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), relay_port);
         socket.send_to(&buf, local_relay).await?;
 
         // In order not to proceed too fast, wait for an answer until the socket has been bound, then proceed
@@ -568,7 +568,7 @@ impl Net {
         Ok(())
     }
 
-    pub async fn bind(&self, addr: SocketAddr) -> Result<Arc<dyn Conn + Send + Sync>> {
+    pub async fn bind(&self, addr: SocketAddr, relay_port: u16) -> Result<Arc<dyn Conn + Send + Sync>> {
         match self {
             Net::VNet(vnet) => {
                 info!("Using the VNet to bind socket");
@@ -608,7 +608,7 @@ impl Net {
                     // We use the assigned port to specify STUN source addresses later
                     let mut bind_addr = addr.clone();
                     bind_addr.set_port(socket.local_addr().unwrap().port());
-                    self.send_binding_for_socket(socket.clone(), bind_addr).await?;
+                    self.send_binding_for_socket(socket.clone(), bind_addr, relay_port).await?;
                     return Ok(socket.clone());
                 }
                 return Err(crate::Error::ErrAddressSpaceExhausted);

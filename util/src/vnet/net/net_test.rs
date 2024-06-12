@@ -58,7 +58,7 @@ async fn test_net_native_bind() -> Result<()> {
     let nw = Net::new(None);
     assert!(!nw.is_virtual(), "should be false");
 
-    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:0")?).await?;
+    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:0")?, 0).await?;
     let laddr = conn.local_addr()?;
     assert_eq!(
         laddr.ip().to_string(),
@@ -93,7 +93,7 @@ async fn test_net_native_loopback() -> Result<()> {
     let nw = Net::new(None);
     assert!(!nw.is_virtual(), "should be false");
 
-    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:0")?).await?;
+    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:0")?, 0).await?;
     let laddr = conn.local_addr()?;
 
     let msg = "PING!";
@@ -408,7 +408,7 @@ async fn test_net_virtual_loopback1() -> Result<()> {
     let nw = Net::new(Some(NetConfig::default()));
     assert!(nw.is_virtual(), "should be true");
 
-    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:0")?).await?;
+    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:0")?, 0).await?;
     let laddr = conn.local_addr()?;
 
     let msg = "PING!";
@@ -429,7 +429,7 @@ async fn test_net_virtual_bind_specific_port() -> Result<()> {
     let nw = Net::new(Some(NetConfig::default()));
     assert!(nw.is_virtual(), "should be true");
 
-    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:50916")?).await?;
+    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:50916")?, 0).await?;
     let laddr = conn.local_addr()?;
     assert_eq!(
         laddr.ip().to_string().as_str(),
@@ -554,7 +554,7 @@ async fn test_net_virtual_resolver() -> Result<()> {
 async fn test_net_virtual_loopback2() -> Result<()> {
     let nw = Net::new(Some(NetConfig::default()));
 
-    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:50916")?).await?;
+    let conn = nw.bind(SocketAddr::from_str("127.0.0.1:50916")?, 0).await?;
     let laddr = conn.local_addr()?;
     assert_eq!(
         laddr.to_string().as_str(),
@@ -681,8 +681,8 @@ async fn test_net_virtual_end2end() -> Result<()> {
         get_ipaddr(&nic).await?
     };
 
-    let conn1 = net1.bind(SocketAddr::new(ip1, 1234)).await?;
-    let conn2 = net2.bind(SocketAddr::new(ip2, 5678)).await?;
+    let conn1 = net1.bind(SocketAddr::new(ip1, 1234), 0).await?;
+    let conn2 = net2.bind(SocketAddr::new(ip2, 5678), 0).await?;
 
     {
         let mut w = wan.lock().await;
@@ -815,9 +815,9 @@ async fn test_net_virtual_two_ips_on_a_nic() -> Result<()> {
     }
 
     let (conn1, conn2) = (
-        net.bind(SocketAddr::new(Ipv4Addr::from_str(DEMO_IP)?.into(), 1234))
+        net.bind(SocketAddr::new(Ipv4Addr::from_str(DEMO_IP)?.into(), 1234), 0)
             .await?,
-        net.bind(SocketAddr::new(Ipv4Addr::from_str("1.2.3.5")?.into(), 1234))
+        net.bind(SocketAddr::new(Ipv4Addr::from_str("1.2.3.5")?.into(), 1234), 0)
             .await?,
     );
 

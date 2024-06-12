@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -281,6 +282,7 @@ impl Agent {
                     ephemeral_config.port_max(),
                     ephemeral_config.port_min(),
                     SocketAddr::new(ip, 0),
+                    agent_internal.relay_listener_port,
                 )
                 .await
                 {
@@ -491,6 +493,7 @@ impl Agent {
                     } else {
                         SocketAddr::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0).into(), 0)
                     },
+                    agent_internal2.relay_listener_port,
                 )
                 .await
                 {
@@ -634,6 +637,7 @@ impl Agent {
                         } else {
                             SocketAddr::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0).into(), 0)
                         },
+                        agent_internal2.relay_listener_port,
                     )
                     .await
                     {
@@ -651,7 +655,7 @@ impl Agent {
                     info!("Bound to port range at: {}", conn.local_addr().unwrap());
 
                     let xoraddr_recvon =
-                        match get_xormapped_addr(&conn, server_addr, STUN_GATHER_TIMEOUT).await {
+                        match get_xormapped_addr(&conn, server_addr, STUN_GATHER_TIMEOUT, agent_internal2.relay_listener_port).await {
                             Ok(xoraddr) => xoraddr,
                             Err(err) => {
                                 log::warn!(
@@ -779,7 +783,7 @@ impl Agent {
 
                 let (loc_conn, rel_addr, rel_port) =
                     if url.proto == ProtoType::Udp && url.scheme == SchemeType::Turn {
-                        let loc_conn = match net2.bind(SocketAddr::from_str("0.0.0.0:0")?).await {
+                        let loc_conn = match net2.bind(SocketAddr::from_str("0.0.0.0:0")?, agent_internal2.relay_listener_port).await {
                             Ok(c) => c,
                             Err(err) => {
                                 log::warn!(

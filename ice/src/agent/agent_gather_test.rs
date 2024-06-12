@@ -90,15 +90,15 @@ async fn test_vnet_gather_listen_udp() -> Result<()> {
     assert!(!local_ips.is_empty(), "should have one local IP");
 
     for ip in local_ips {
-        let _ = listen_udp_in_port_range(&nw, 0, 0, SocketAddr::new(ip, 0)).await?;
+        let _ = listen_udp_in_port_range(&nw, 0, 0, SocketAddr::new(ip, 0), 0).await?;
 
-        let result = listen_udp_in_port_range(&nw, 4999, 5000, SocketAddr::new(ip, 0)).await;
+        let result = listen_udp_in_port_range(&nw, 4999, 5000, SocketAddr::new(ip, 0), 0).await;
         assert!(
             result.is_err(),
             "listenUDP with invalid port range did not return ErrPort"
         );
 
-        let conn = listen_udp_in_port_range(&nw, 5000, 5000, SocketAddr::new(ip, 0)).await?;
+        let conn = listen_udp_in_port_range(&nw, 5000, 5000, SocketAddr::new(ip, 0), 0).await?;
         let port = conn.local_addr()?.port();
         assert_eq!(
             port, 5000,
